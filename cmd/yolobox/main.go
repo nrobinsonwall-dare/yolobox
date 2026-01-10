@@ -433,10 +433,8 @@ func mergeConfig(dst *Config, src Config) {
 }
 
 func runShell(cfg Config) error {
-	// Check if we should prompt about Claude config (before printing config)
-	cfg = maybePromptClaudeConfig(cfg, true)
 	printActiveConfig(cfg)
-	return runCommand(cfg, []string{"bash"}, false) // already prompted, don't prompt again
+	return runCommand(cfg, []string{"bash"}, true)
 }
 
 func printActiveConfig(cfg Config) {
@@ -469,9 +467,6 @@ func printActiveConfig(cfg Config) {
 }
 
 func runCommand(cfg Config, command []string, interactive bool) error {
-	// Check if we should prompt about Claude config
-	cfg = maybePromptClaudeConfig(cfg, interactive)
-
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -481,94 +476,6 @@ func runCommand(cfg Config, command []string, interactive bool) error {
 		return err
 	}
 	return execRuntime(cfg.Runtime, args)
-}
-
-// claudeConfigPromptFile returns path to file that tracks if we've prompted about Claude config
-func claudeConfigPromptFile() string {
-	configDir, _ := os.UserConfigDir()
-	return filepath.Join(configDir, "yolobox", "claude-config-prompted")
-}
-
-// hasClaudeConfig checks if host has Claude config files
-func hasClaudeConfig() bool {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	claudeDir := filepath.Join(home, ".claude")
-	claudeJSON := filepath.Join(home, ".claude.json")
-	_, errDir := os.Stat(claudeDir)
-	_, errJSON := os.Stat(claudeJSON)
-	return errDir == nil || errJSON == nil
-}
-
-// maybePromptClaudeConfig prompts user about copying Claude config on first interactive run
-func maybePromptClaudeConfig(cfg Config, interactive bool) Config {
-	// Skip if already enabled, not interactive, or no Claude config on host
-	if cfg.ClaudeConfig || !interactive || !hasClaudeConfig() {
-		return cfg
-	}
-
-	// Check if we've already prompted
-	promptFile := claudeConfigPromptFile()
-	if _, err := os.Stat(promptFile); err == nil {
-		return cfg
-	}
-
-	// Prompt user
-	fmt.Fprintf(os.Stderr, "\n%sFound Claude config on host (~/.claude)%s\n", colorYellow, colorReset)
-	fmt.Fprintf(os.Stderr, "Copy it to the container? This shares your Claude settings and auth.\n")
-	fmt.Fprintf(os.Stderr, "  [y] Yes, copy config  [n] No, start fresh  [a] Always copy  [never] Never ask again\n")
-	fmt.Fprintf(os.Stderr, "%s> %s", colorCyan, colorReset)
-
-	var response string
-	fmt.Scanln(&response)
-	response = strings.ToLower(strings.TrimSpace(response))
-
-	// Create config dir if needed
-	os.MkdirAll(filepath.Dir(promptFile), 0755)
-
-	switch response {
-	case "y", "yes":
-		cfg.ClaudeConfig = true
-	case "a", "always":
-		cfg.ClaudeConfig = true
-		// Save to global config
-		saveClaudeConfigPreference(true)
-		os.WriteFile(promptFile, []byte("always"), 0644)
-	case "never":
-		os.WriteFile(promptFile, []byte("never"), 0644)
-	default:
-		// "n" or anything else - just mark as prompted for this session
-		os.WriteFile(promptFile, []byte("asked"), 0644)
-	}
-
-	return cfg
-}
-
-// saveClaudeConfigPreference saves claude_config=true to global config
-func saveClaudeConfigPreference(enabled bool) {
-	configPath, err := globalConfigPath()
-	if err != nil {
-		return
-	}
-
-	// Read existing config or create new
-	var cfg Config
-	if data, err := os.ReadFile(configPath); err == nil {
-		toml.Unmarshal(data, &cfg)
-	}
-
-	cfg.ClaudeConfig = enabled
-
-	// Write back
-	os.MkdirAll(filepath.Dir(configPath), 0755)
-	f, err := os.Create(configPath)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	toml.NewEncoder(f).Encode(cfg)
 }
 
 func printConfig(cfg Config) error {
