@@ -18,7 +18,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-var Version = "0.1.0"
+var Version = "dev"
 
 const (
 	logo    = `
@@ -404,6 +404,12 @@ func mergeConfigFile(path string, cfg *Config, restricted bool) error {
 	}
 
 	if restricted {
+		// Runtime must never be set from project config (RCE risk)
+		if fileCfg.Runtime != "" {
+			warn("Ignoring 'runtime' in project config (security: use global config or CLI flags)")
+			fileCfg.Runtime = ""
+		}
+
 		var safeMounts []string
 		projectDir := filepath.Dir(path)
 		for _, m := range fileCfg.Mounts {
