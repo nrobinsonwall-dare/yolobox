@@ -66,7 +66,8 @@ RUN npm install -g \
     yarn \
     pnpm \
     @google/gemini-cli \
-    @openai/codex
+    @openai/codex \
+    opencode-ai
 
 # Create yolo user with passwordless sudo
 RUN useradd -m -s /bin/bash yolo \
@@ -121,6 +122,11 @@ RUN cp /opt/yolobox/wrapper-template /opt/yolobox/bin/codex \
 RUN cp /opt/yolobox/wrapper-template /opt/yolobox/bin/gemini \
     && echo 'exec "$REAL_BIN" --yolo "$@"' >> /opt/yolobox/bin/gemini \
     && chmod +x /opt/yolobox/bin/gemini
+
+# OpenCode wrapper (no yolo flag yet, passthrough for now)
+RUN cp /opt/yolobox/wrapper-template /opt/yolobox/bin/opencode \
+    && echo 'exec "$REAL_BIN" "$@"' >> /opt/yolobox/bin/opencode \
+    && chmod +x /opt/yolobox/bin/opencode
 
 # Add wrapper dir and ~/.local/bin to PATH (wrappers take priority)
 ENV PATH="/opt/yolobox/bin:/home/yolo/.local/bin:$PATH"

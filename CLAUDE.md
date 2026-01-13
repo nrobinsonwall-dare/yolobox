@@ -54,6 +54,7 @@ make image
 ./yolobox run claude --version          # Claude Code
 ./yolobox run gemini --version          # Gemini CLI
 ./yolobox run codex --version           # OpenAI Codex
+./yolobox run opencode --version        # OpenCode
 ./yolobox run gh --version              # GitHub CLI
 
 # 7. Flag tests (flags go AFTER subcommand)
