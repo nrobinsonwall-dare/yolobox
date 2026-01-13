@@ -9,7 +9,7 @@
 
 **Let your AI go full send. Your home directory stays home.**
 
-Run [Claude Code](https://claude.ai/code), [Codex](https://openai.com/index/codex/), or any AI coding agent in "yolo mode" without nuking your home directory.
+Run [Claude Code](https://claude.ai/code), [Codex](https://openai.com/codex/), or any AI coding agent in "yolo mode" without nuking your home directory.
 
 ## The Problem
 
