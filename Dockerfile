@@ -71,7 +71,8 @@ RUN npm install -g \
     pnpm \
     @google/gemini-cli \
     @openai/codex \
-    opencode-ai
+    opencode-ai \
+    @github/copilot
 
 # Install Go (from official image)
 COPY --from=go-source /usr/local/go /usr/local/go
@@ -138,6 +139,12 @@ RUN cp /opt/yolobox/wrapper-template /opt/yolobox/bin/gemini \
 RUN cp /opt/yolobox/wrapper-template /opt/yolobox/bin/opencode \
     && echo 'exec "$REAL_BIN" "$@"' >> /opt/yolobox/bin/opencode \
     && chmod +x /opt/yolobox/bin/opencode
+
+# Copilot wrapper
+RUN cp /opt/yolobox/wrapper-template /opt/yolobox/bin/copilot \
+    && echo 'exec "$REAL_BIN" --yolo "$@"' >> /opt/yolobox/bin/copilot \
+    && chmod +x /opt/yolobox/bin/copilot
+
 
 # Add wrapper dir and ~/.local/bin to PATH (wrappers take priority)
 ENV PATH="/opt/yolobox/bin:/home/yolo/.local/bin:$PATH"
