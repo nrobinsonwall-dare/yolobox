@@ -248,6 +248,7 @@ func TestAutoPassthroughEnvVars(t *testing.T) {
 	expected := []string{
 		"ANTHROPIC_API_KEY",
 		"OPENAI_API_KEY",
+		"COPILOT_GITHUB_TOKEN",
 		"GITHUB_TOKEN",
 		"GH_TOKEN",
 	}

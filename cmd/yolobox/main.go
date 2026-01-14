@@ -47,6 +47,7 @@ const (
 var autoPassthroughEnvVars = []string{
 	"ANTHROPIC_API_KEY",
 	"OPENAI_API_KEY",
+	"COPILOT_GITHUB_TOKEN",
 	"GITHUB_TOKEN",
 	"GH_TOKEN",
 	"OPENROUTER_API_KEY",
@@ -272,8 +273,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  Project: .yolobox.toml")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "%sAUTO-FORWARDED ENV VARS:%s\n", colorBold, colorReset)
-	fmt.Fprintln(os.Stderr, "  ANTHROPIC_API_KEY, OPENAI_API_KEY, GITHUB_TOKEN, GH_TOKEN,")
-	fmt.Fprintln(os.Stderr, "  OPENROUTER_API_KEY, GEMINI_API_KEY")
+	fmt.Fprintln(os.Stderr, "  ANTHROPIC_API_KEY, OPENAI_API_KEY, COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN")
+	fmt.Fprintln(os.Stderr, "  OPENROUTER_API_KEY, GEMINI_API_KEY, GEMINI_MODEL, GOOGLE_API_KEY")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "%sEXAMPLES:%s\n", colorBold, colorReset)
 	fmt.Fprintln(os.Stderr, "  yolobox                     # Drop into a shell")

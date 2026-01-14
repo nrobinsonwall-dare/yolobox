@@ -102,7 +102,7 @@ yolobox help                # Show help
 These are automatically passed into the container if set:
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
-- `GITHUB_TOKEN` / `GH_TOKEN`
+- `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN`
 - `OPENROUTER_API_KEY`
 - `GEMINI_API_KEY`
 
