@@ -1,5 +1,5 @@
 # Stage: Go source
-FROM golang:1.23.5 AS go-source
+FROM golang:1.25.5 AS go-source
 
 # Stage: Claude Code installer
 FROM ubuntu:24.04 AS claude-installer
