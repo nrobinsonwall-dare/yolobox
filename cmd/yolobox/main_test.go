@@ -173,6 +173,26 @@ func TestBuildRunArgs(t *testing.T) {
 	}
 }
 
+func TestBuildRunArgsNoYolo(t *testing.T) {
+	cfg := Config{
+		Image:    "test-image",
+		NoYolo: true,
+	}
+
+	args, err := buildRunArgs(cfg, "/test/project", []string{"bash"}, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	argsStr := strings.Join(args, " ")
+	if !strings.Contains(argsStr, "YOLOBOX=1") {
+		t.Error("expected YOLOBOX=1 env var to be present")
+	}
+	if !strings.Contains(argsStr, "NO_YOLO=1") {
+		t.Error("expected NO_YOLO=1 env var to be present")
+	}
+}
+
 func TestBuildRunArgsNoNetwork(t *testing.T) {
 	cfg := Config{
 		Image:     "test-image",

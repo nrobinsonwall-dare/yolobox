@@ -62,6 +62,7 @@ type Config struct {
 	SSHAgent        bool     `toml:"ssh_agent"`
 	ReadonlyProject bool     `toml:"readonly_project"`
 	NoNetwork       bool     `toml:"no_network"`
+	NoYolo          bool     `toml:"no_yolo"`
 	ClaudeConfig    bool     `toml:"claude_config"`
 }
 
@@ -265,6 +266,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  --env <KEY=val>       Set environment variable (repeatable)")
 	fmt.Fprintln(os.Stderr, "  --ssh-agent           Forward SSH agent socket")
 	fmt.Fprintln(os.Stderr, "  --no-network          Disable network access")
+	fmt.Fprintln(os.Stderr, "  --no-yolo             Disable AI CLIs YOLO mode")
 	fmt.Fprintln(os.Stderr, "  --readonly-project    Mount project directory read-only")
 	fmt.Fprintln(os.Stderr, "  --claude-config       Copy host Claude config to container")
 	fmt.Fprintln(os.Stderr, "")
@@ -305,6 +307,7 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 		sshAgent        bool
 		readonlyProject bool
 		noNetwork       bool
+		noYolo          bool
 		claudeConfig    bool
 		mounts          stringSliceFlag
 		envVars         stringSliceFlag
@@ -315,6 +318,7 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 	fs.BoolVar(&sshAgent, "ssh-agent", false, "mount SSH agent socket")
 	fs.BoolVar(&readonlyProject, "readonly-project", false, "mount project read-only")
 	fs.BoolVar(&noNetwork, "no-network", false, "disable network")
+	fs.BoolVar(&noYolo, "no-yolo", false, "disable AI CLIs YOLO mode")
 	fs.BoolVar(&claudeConfig, "claude-config", false, "copy host Claude config to container")
 	fs.Var(&mounts, "mount", "extra mount src:dst")
 	fs.Var(&envVars, "env", "environment variable KEY=value")
@@ -341,6 +345,9 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 	}
 	if noNetwork {
 		cfg.NoNetwork = true
+	}
+	if noYolo {
+		cfg.NoYolo = true
 	}
 	if claudeConfig {
 		cfg.ClaudeConfig = true
@@ -526,6 +533,9 @@ func mergeConfig(dst *Config, src Config) {
 	if src.NoNetwork {
 		dst.NoNetwork = true
 	}
+	if src.NoYolo {
+		dst.NoYolo = true
+	}
 	if src.ClaudeConfig {
 		dst.ClaudeConfig = true
 	}
@@ -546,6 +556,9 @@ func printActiveConfig(cfg Config) {
 	}
 	if cfg.NoNetwork {
 		active = append(active, "no-network")
+	}
+	if cfg.NoYolo {
+		active = append(active, "no-yolo")
 	}
 	if cfg.ReadonlyProject {
 		active = append(active, "readonly-project")
@@ -592,6 +605,7 @@ func printConfig(cfg Config) error {
 	fmt.Printf("%sssh_agent:%s %t\n", colorBold, colorReset, cfg.SSHAgent)
 	fmt.Printf("%sreadonly_project:%s %t\n", colorBold, colorReset, cfg.ReadonlyProject)
 	fmt.Printf("%sno_network:%s %t\n", colorBold, colorReset, cfg.NoNetwork)
+	fmt.Printf("%sno_yolo:%s %t\n", colorBold, colorReset, cfg.NoYolo)
 	fmt.Printf("%sclaude_config:%s %t\n", colorBold, colorReset, cfg.ClaudeConfig)
 	if len(cfg.Mounts) > 0 {
 		fmt.Printf("%smounts:%s\n", colorBold, colorReset)
@@ -728,6 +742,9 @@ func buildRunArgs(cfg Config, projectDir string, command []string, interactive b
 
 	args = append(args, "-w", "/workspace")
 	args = append(args, "-e", "YOLOBOX=1")
+	if cfg.NoYolo {
+		args = append(args, "-e", "NO_YOLO=1")
+	}
 	if term := os.Getenv("TERM"); term != "" {
 		args = append(args, "-e", "TERM="+term)
 	}
