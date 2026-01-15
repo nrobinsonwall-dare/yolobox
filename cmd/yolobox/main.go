@@ -197,20 +197,36 @@ func runCmd() error {
 		checkForUpdates()
 	}
 
+	// Parse flags first if present, then determine subcommand
+	var cfg Config
+	var rest []string
+
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		cfg, rest, err := parseBaseFlags("yolobox", args)
+		var err error
+		cfg, rest, err = parseBaseFlags("yolobox", args)
 		if err != nil {
 			return err
 		}
-		if len(rest) != 0 {
-			return fmt.Errorf("unexpected args: %v", rest)
+		if len(rest) == 0 {
+			return runShell(cfg)
 		}
-		return runShell(cfg)
+		// rest contains subcommand and its args
+		args = rest
 	}
 
 	switch args[0] {
 	case "run":
-		cfg, rest, err := parseBaseFlags("run", args[1:])
+		// If we already parsed flags above, use that config
+		// Otherwise parse flags after 'run'
+		if len(rest) > 0 {
+			// Flags were parsed before subcommand
+			if len(args) < 2 {
+				return fmt.Errorf("run requires a command")
+			}
+			return runCommand(cfg, args[1:], false)
+		}
+		var err error
+		cfg, rest, err = parseBaseFlags("run", args[1:])
 		if err != nil {
 			return err
 		}
@@ -221,7 +237,15 @@ func runCmd() error {
 	case "upgrade":
 		return upgradeYolobox()
 	case "config":
-		cfg, rest, err := parseBaseFlags("config", args[1:])
+		// If we already parsed flags above, use that config
+		if len(rest) > 0 {
+			if len(args) > 1 {
+				return fmt.Errorf("unexpected args: %v", args[1:])
+			}
+			return printConfig(cfg)
+		}
+		var err error
+		cfg, rest, err = parseBaseFlags("config", args[1:])
 		if err != nil {
 			return err
 		}
