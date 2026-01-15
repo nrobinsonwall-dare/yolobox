@@ -66,6 +66,7 @@ type Config struct {
 	NoYolo          bool     `toml:"no_yolo"`
 	ClaudeConfig    bool     `toml:"claude_config"`
 	GitConfig       bool     `toml:"git_config"`
+	MatchHostUid    bool     `toml:"match_host_uid"`
 }
 
 type stringSliceFlag []string
@@ -272,6 +273,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  --readonly-project    Mount project directory read-only")
 	fmt.Fprintln(os.Stderr, "  --claude-config       Copy host Claude config to container")
 	fmt.Fprintln(os.Stderr, "  --git-config          Copy host git config to container")
+	fmt.Fprintln(os.Stderr, "  --match-host-uid      Match container UID/GID to host user")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "%sCONFIG:%s\n", colorBold, colorReset)
 	fmt.Fprintln(os.Stderr, "  Global:  ~/.config/yolobox/config.toml")
@@ -313,6 +315,7 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 		noYolo          bool
 		claudeConfig    bool
 		gitConfig       bool
+		matchHostUid    bool
 		mounts          stringSliceFlag
 		envVars         stringSliceFlag
 	)
@@ -325,6 +328,7 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 	fs.BoolVar(&noYolo, "no-yolo", false, "disable AI CLIs YOLO mode")
 	fs.BoolVar(&claudeConfig, "claude-config", false, "copy host Claude config to container")
 	fs.BoolVar(&gitConfig, "git-config", false, "copy host git config to container")
+	fs.BoolVar(&matchHostUid, "match-host-uid", false, "match container UID/GID to host user")
 	fs.Var(&mounts, "mount", "extra mount src:dst")
 	fs.Var(&envVars, "env", "environment variable KEY=value")
 
@@ -359,6 +363,9 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 	}
 	if gitConfig {
 		cfg.GitConfig = true
+	}
+	if matchHostUid {
+		cfg.MatchHostUid = true
 	}
 	if len(mounts) > 0 {
 		cfg.Mounts = append(cfg.Mounts, mounts...)
@@ -554,6 +561,15 @@ func mergeConfig(dst *Config, src Config) {
 	if src.GitConfig {
 		dst.GitConfig = true
 	}
+	if src.MatchHostUid {
+		dst.MatchHostUid = true
+	}
+	if src.AmpConfig {
+		dst.AmpConfig = true
+	}
+	if src.CrushConfig {
+		dst.CrushConfig = true
+	}
 }
 
 func runShell(cfg Config) error {
@@ -583,6 +599,9 @@ func printActiveConfig(cfg Config) {
 	}
 	if cfg.GitConfig {
 		active = append(active, "git-config")
+	}
+	if cfg.MatchHostUid {
+		active = append(active, "match-host-uid")
 	}
 	if len(cfg.Mounts) > 0 {
 		active = append(active, fmt.Sprintf("%d extra mount(s)", len(cfg.Mounts)))
@@ -626,6 +645,7 @@ func printConfig(cfg Config) error {
 	fmt.Printf("%sno_yolo:%s %t\n", colorBold, colorReset, cfg.NoYolo)
 	fmt.Printf("%sclaude_config:%s %t\n", colorBold, colorReset, cfg.ClaudeConfig)
 	fmt.Printf("%sgit_config:%s %t\n", colorBold, colorReset, cfg.GitConfig)
+	fmt.Printf("%smatch_host_uid:%s %t\n", colorBold, colorReset, cfg.MatchHostUid)
 	if len(cfg.Mounts) > 0 {
 		fmt.Printf("%smounts:%s\n", colorBold, colorReset)
 		for _, m := range cfg.Mounts {
@@ -846,6 +866,17 @@ func buildRunArgs(cfg Config, projectDir string, command []string, interactive b
 		} else {
 			args = append(args, "-v", sock+":/ssh-agent")
 			args = append(args, "-e", "SSH_AUTH_SOCK=/ssh-agent")
+		}
+	}
+
+	// UID/GID matching
+	if cfg.MatchHostUid {
+		runtimePath, _ := resolveRuntime(cfg.Runtime)
+		if strings.Contains(filepath.Base(runtimePath), "podman") {
+			args = append(args, "--userns=keep-id")
+		} else {
+			args = append(args, "-e", fmt.Sprintf("YOLOBOX_HOST_UID=%d", os.Getuid()))
+			args = append(args, "-e", fmt.Sprintf("YOLOBOX_HOST_GID=%d", os.Getgid()))
 		}
 	}
 

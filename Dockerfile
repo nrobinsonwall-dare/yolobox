@@ -81,7 +81,12 @@ ENV PATH="/usr/local/go/bin:$PATH"
 # Install uv (fast Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-# Create yolo user with passwordless sudo
+# Delete ubuntu user (UID 1000) so yolo gets UID 1000
+# Ubuntu 24.04 includes this user by default
+RUN userdel -r ubuntu 2>/dev/null || true && \
+    groupdel ubuntu 2>/dev/null || true
+
+# Create yolo user with passwordless sudo (will get UID 1000 now)
 RUN useradd -m -s /bin/bash yolo \
     && echo "yolo ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/yolo \
     && chmod 0440 /etc/sudoers.d/yolo
@@ -165,6 +170,106 @@ USER root
 RUN mkdir -p /host-claude /host-git && \
     printf '%s\n' \
     '#!/bin/bash' \
+    '' \
+    '#' \
+    '# ============================================================================' \
+    '# MATCH HOST UID/GID (--match-host-uid flag)' \
+    '# ============================================================================' \
+    '# Purpose: Remap the container yolo user UID/GID to match the host user so' \
+    '#          files created in /workspace are owned by the host user, not root.' \
+    '#' \
+    '# How it works:' \
+    '#   - Docker: yolobox passes YOLOBOX_HOST_UID/GID env vars, we remap here' \
+    '#   - Podman: uses native --userns=keep-id, no remapping needed' \
+    '#' \
+    '# Why this is complex:' \
+    '#   1. UID conflicts: Another user (e.g., ubuntu UID 1000) may already exist' \
+    '#   2. GID conflicts: System groups exist at low GIDs (e.g., dialout=20)' \
+    '#   3. macOS quirk: macOS uses UID 501 / GID 20 (staff), which maps to dialout' \
+    '#   4. Process identity: After usermod, current process still has OLD UID' \
+    '#      - This causes "you do not exist in passwd database" errors' \
+    '#      - Solution: Create placeholder old-yolo user, then re-exec as new yolo' \
+    '#' \
+    '# Strategy:' \
+    '#   1. Run all user/group mutations in a root subshell (avoids identity issues)' \
+    '#   2. Delete any conflicting user that has our target UID' \
+    '#   3. For GID < 1000: add yolo as supplementary member (don'"'"'t delete system groups)' \
+    '#   4. For GID >= 1000: delete conflicting group and take over the GID' \
+    '#   5. Create old-yolo placeholder so current process can still resolve its UID' \
+    '#   6. Re-exec the entrypoint as the new yolo user' \
+    '# ============================================================================' \
+    '#' \
+    'if [ -n "$YOLOBOX_HOST_UID" ] && [ "$YOLOBOX_HOST_UID" != "0" ]; then' \
+    '    CURRENT_UID=$(id -u yolo)' \
+    '    CURRENT_GID=$(id -g yolo)' \
+    '    if [ "$YOLOBOX_HOST_UID" != "$CURRENT_UID" ]; then' \
+    '        echo -e "\033[33m→ Matching container UID/GID to host ($YOLOBOX_HOST_UID:$YOLOBOX_HOST_GID)\033[0m" >&2' \
+    '        ' \
+    '        # Run UID/GID mutation as root in a subshell' \
+    '        # Why subshell? After usermod changes yolo'"'"'s UID, the current shell (running' \
+    '        # as yolo with UID 1000) can'"'"'t resolve itself in /etc/passwd anymore.' \
+    '        # Running in a root subshell avoids this identity crisis.' \
+    '        sudo -n bash -c '"'"'' \
+    '            YOLOBOX_HOST_UID='"'"'"$YOLOBOX_HOST_UID"'"'"'' \
+    '            YOLOBOX_HOST_GID='"'"'"$YOLOBOX_HOST_GID"'"'"'' \
+    '            CURRENT_UID='"'"'"$CURRENT_UID"'"'"'' \
+    '            CURRENT_GID='"'"'"$CURRENT_GID"'"'"'' \
+    '            ' \
+    '            # Step 1: Remove any user with our target UID (e.g., ubuntu at UID 1000)' \
+    '            CONFLICT_USER=$(getent passwd "$YOLOBOX_HOST_UID" | cut -d: -f1)' \
+    '            if [ -n "$CONFLICT_USER" ] && [ "$CONFLICT_USER" != "yolo" ]; then' \
+    '                userdel -r "$CONFLICT_USER" 2>/dev/null || true' \
+    '            fi' \
+    '            ' \
+    '            # Step 2: Change yolo to the new UID' \
+    '            usermod -u "$YOLOBOX_HOST_UID" yolo' \
+    '            ' \
+    '            # Step 3: Handle GID changes (more complex due to system groups)' \
+    '            if [ -n "$YOLOBOX_HOST_GID" ] && [ "$YOLOBOX_HOST_GID" != "$CURRENT_GID" ]; then' \
+    '                CONFLICT_GROUP=$(getent group "$YOLOBOX_HOST_GID" | cut -d: -f1)' \
+    '                if [ -n "$CONFLICT_GROUP" ] && [ "$CONFLICT_GROUP" != "yolo" ]; then' \
+    '                    if [ "$YOLOBOX_HOST_GID" -lt 1000 ]; then' \
+    '                        # System group conflict (e.g., macOS GID 20 = dialout in Ubuntu)' \
+    '                        # Cannot delete system groups, so add yolo as supplementary member' \
+    '                        # Files will still be accessible via group membership' \
+    '                        usermod -a -G "$CONFLICT_GROUP" yolo 2>/dev/null || true' \
+    '                    else' \
+    '                        # Non-system group (GID >= 1000) - safe to delete and replace' \
+    '                        groupdel "$CONFLICT_GROUP" 2>/dev/null || true' \
+    '                        groupmod -g "$YOLOBOX_HOST_GID" yolo 2>/dev/null || true' \
+    '                    fi' \
+    '                else' \
+    '                    # No conflict or already the yolo group - just change the GID' \
+    '                    groupmod -g "$YOLOBOX_HOST_GID" yolo 2>/dev/null || true' \
+    '                fi' \
+    '            fi' \
+    '            ' \
+    '            # Step 4: Create placeholder user for old UID' \
+    '            # After usermod, our current shell process still runs with the OLD UID (e.g., 1000)' \
+    '            # but /etc/passwd no longer has an entry for it. This causes:' \
+    '            #   - "you do not exist in passwd database" errors' \
+    '            #   - sudo failing to resolve the current user' \
+    '            # Solution: Create a dummy user that maps the old UID so lookups work' \
+    '            useradd -u "$CURRENT_UID" -g yolo -M -N -s /bin/false old-yolo 2>/dev/null || true' \
+    '            # Grant old-yolo sudo access so the re-exec below can run' \
+    '            echo "old-yolo ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/old-yolo' \
+    '            chmod 0440 /etc/sudoers.d/old-yolo' \
+    '        '"'"'' \
+    '        ' \
+    '        # Step 5: Re-exec as the updated yolo user' \
+    '        # This starts a fresh shell with the new UID/GID identity' \
+    '        exec sudo -u yolo -- "$0" "$@"' \
+    '    else' \
+    '        echo -e "\033[32m✓ Container UID already matches host ($CURRENT_UID:$CURRENT_GID)\033[0m" >&2' \
+    '    fi' \
+    'fi' \
+    '' \
+    '# Fix ownership of yolo-owned directories after UID/GID switch' \
+    '# These directories may have been created with the old UID (1000) and need updating' \
+    'sudo chown -R yolo:yolo /home/yolo 2>/dev/null || true' \
+    'sudo chown -R yolo:yolo /var/cache 2>/dev/null || true' \
+    'sudo chown -R yolo:yolo /output 2>/dev/null || true' \
+    '' \
     '' \
     '# Copy Claude config from host staging area if present' \
     'if [ -d /host-claude/.claude ] || [ -f /host-claude/.claude.json ]; then' \
