@@ -105,6 +105,10 @@ USER yolo
 RUN mkdir -p /home/yolo/.local/bin && \
     ln -s /usr/local/bin/claude /home/yolo/.local/bin/claude && \
     claude install || true
+
+# Install Amp via official script (supports auto-update, installs to ~/.local/bin)
+RUN curl -fsSL https://ampcode.com/install.sh | bash
+
 WORKDIR /home/yolo
 
 # Set up a fun prompt and aliases
@@ -153,6 +157,11 @@ RUN cp /opt/yolobox/wrapper-template /opt/yolobox/bin/copilot \
     && echo 'exec "$REAL_BIN" --yolo "$@"' >> /opt/yolobox/bin/copilot \
     && chmod +x /opt/yolobox/bin/copilot
 
+# Amp wrapper
+RUN cp /opt/yolobox/wrapper-template /opt/yolobox/bin/amp \
+    && echo 'exec "$REAL_BIN" --dangerously-allow-all "$@"' >> /opt/yolobox/bin/amp \
+    && chmod +x /opt/yolobox/bin/amp
+
 
 # Add wrapper dir and ~/.local/bin to PATH (wrappers take priority)
 ENV PATH="/opt/yolobox/bin:/home/yolo/.local/bin:$PATH"
@@ -167,7 +176,7 @@ RUN echo 'echo ""' >> ~/.bashrc \
 
 # Create entrypoint script
 USER root
-RUN mkdir -p /host-claude /host-git && \
+RUN mkdir -p /host-claude /host-git /host-amp && \
     printf '%s\n' \
     '#!/bin/bash' \
     '' \
@@ -292,6 +301,14 @@ RUN mkdir -p /host-claude /host-git && \
     '    sudo rm -f /home/yolo/.gitconfig' \
     '    sudo cp -a /host-git/.gitconfig /home/yolo/.gitconfig' \
     '    sudo chown yolo:yolo /home/yolo/.gitconfig' \
+    'fi' \
+    '' \
+    '# Copy Amp config from host staging area if present' \
+    'if [ -d /host-amp ] && [ "$(ls -A /host-amp 2>/dev/null)" ]; then' \
+    '    echo -e "\033[33m→ Copying host Amp config to container\033[0m" >&2' \
+    '    mkdir -p /home/yolo/.config/amp' \
+    '    sudo cp -a /host-amp/* /home/yolo/.config/amp/' \
+    '    sudo chown -R yolo:yolo /home/yolo/.config/amp' \
     'fi' \
     '' \
     '# Auto-trust /workspace for Claude Code (this is yolobox after all)' \

@@ -53,6 +53,7 @@ var autoPassthroughEnvVars = []string{
 	"GH_TOKEN",
 	"OPENROUTER_API_KEY",
 	"GEMINI_API_KEY",
+	"AMP_API_KEY",
 }
 
 type Config struct {
@@ -66,6 +67,7 @@ type Config struct {
 	NoYolo          bool     `toml:"no_yolo"`
 	ClaudeConfig    bool     `toml:"claude_config"`
 	GitConfig       bool     `toml:"git_config"`
+	AmpConfig       bool     `toml:"amp_config"`
 	MatchHostUid    bool     `toml:"match_host_uid"`
 }
 
@@ -297,6 +299,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  --readonly-project    Mount project directory read-only")
 	fmt.Fprintln(os.Stderr, "  --claude-config       Copy host Claude config to container")
 	fmt.Fprintln(os.Stderr, "  --git-config          Copy host git config to container")
+	fmt.Fprintln(os.Stderr, "  --amp-config          Copy host Amp config to container")
 	fmt.Fprintln(os.Stderr, "  --match-host-uid      Match container UID/GID to host user")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "%sCONFIG:%s\n", colorBold, colorReset)
@@ -305,7 +308,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "%sAUTO-FORWARDED ENV VARS:%s\n", colorBold, colorReset)
 	fmt.Fprintln(os.Stderr, "  ANTHROPIC_API_KEY, OPENAI_API_KEY, COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN")
-	fmt.Fprintln(os.Stderr, "  OPENROUTER_API_KEY, GEMINI_API_KEY, GEMINI_MODEL, GOOGLE_API_KEY")
+	fmt.Fprintln(os.Stderr, "  OPENROUTER_API_KEY, GEMINI_API_KEY, GEMINI_MODEL, GOOGLE_API_KEY, AMP_API_KEY")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "%sEXAMPLES:%s\n", colorBold, colorReset)
 	fmt.Fprintln(os.Stderr, "  yolobox                     # Drop into a shell")
@@ -339,6 +342,7 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 		noYolo          bool
 		claudeConfig    bool
 		gitConfig       bool
+		ampConfig       bool
 		matchHostUid    bool
 		mounts          stringSliceFlag
 		envVars         stringSliceFlag
@@ -352,6 +356,7 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 	fs.BoolVar(&noYolo, "no-yolo", false, "disable AI CLIs YOLO mode")
 	fs.BoolVar(&claudeConfig, "claude-config", false, "copy host Claude config to container")
 	fs.BoolVar(&gitConfig, "git-config", false, "copy host git config to container")
+	fs.BoolVar(&ampConfig, "amp-config", false, "copy host Amp config to container")
 	fs.BoolVar(&matchHostUid, "match-host-uid", false, "match container UID/GID to host user")
 	fs.Var(&mounts, "mount", "extra mount src:dst")
 	fs.Var(&envVars, "env", "environment variable KEY=value")
@@ -387,6 +392,9 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 	}
 	if gitConfig {
 		cfg.GitConfig = true
+	}
+	if ampConfig {
+		cfg.AmpConfig = true
 	}
 	if matchHostUid {
 		cfg.MatchHostUid = true
@@ -548,6 +556,10 @@ func mergeConfigFile(path string, cfg *Config, restricted bool) error {
 			warn("Ignoring restricted field in project config: git_config=true (use global config or CLI flags)")
 			fileCfg.GitConfig = false
 		}
+		if fileCfg.AmpConfig {
+			warn("Ignoring restricted field in project config: amp_config=true (use global config or CLI flags)")
+			fileCfg.AmpConfig = false
+		}
 	}
 
 	mergeConfig(cfg, fileCfg)
@@ -624,6 +636,9 @@ func printActiveConfig(cfg Config) {
 	if cfg.GitConfig {
 		active = append(active, "git-config")
 	}
+	if cfg.AmpConfig {
+		active = append(active, "amp-config")
+	}
 	if cfg.MatchHostUid {
 		active = append(active, "match-host-uid")
 	}
@@ -669,6 +684,7 @@ func printConfig(cfg Config) error {
 	fmt.Printf("%sno_yolo:%s %t\n", colorBold, colorReset, cfg.NoYolo)
 	fmt.Printf("%sclaude_config:%s %t\n", colorBold, colorReset, cfg.ClaudeConfig)
 	fmt.Printf("%sgit_config:%s %t\n", colorBold, colorReset, cfg.GitConfig)
+	fmt.Printf("%samp_config:%s %t\n", colorBold, colorReset, cfg.AmpConfig)
 	fmt.Printf("%smatch_host_uid:%s %t\n", colorBold, colorReset, cfg.MatchHostUid)
 	if len(cfg.Mounts) > 0 {
 		fmt.Printf("%smounts:%s\n", colorBold, colorReset)
@@ -870,6 +886,18 @@ func buildRunArgs(cfg Config, projectDir string, command []string, interactive b
 		gitConfigFile := filepath.Join(home, ".gitconfig")
 		if _, err := os.Stat(gitConfigFile); err == nil {
 			args = append(args, "-v", gitConfigFile+":/host-git/.gitconfig:ro")
+		}
+	}
+
+	// Mount Amp config from host to staging area (copied to /home/yolo by entrypoint)
+	if cfg.AmpConfig {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		ampConfigDir := filepath.Join(home, ".config", "amp")
+		if _, err := os.Stat(ampConfigDir); err == nil {
+			args = append(args, "-v", ampConfigDir+":/host-amp:ro")
 		}
 	}
 

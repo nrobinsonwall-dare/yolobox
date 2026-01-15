@@ -68,6 +68,7 @@ make image
 ./yolobox run codex --version           # OpenAI Codex
 ./yolobox run opencode --version        # OpenCode
 ./yolobox run copilot --version         # GitHub Copilot CLI
+./yolobox run amp --version             # Sourcegraph Amp
 ./yolobox run gh --version              # GitHub CLI
 
 # 7. Flag tests (flags go AFTER subcommand)
@@ -83,11 +84,14 @@ ANTHROPIC_API_KEY=test ./yolobox run printenv ANTHROPIC_API_KEY  # Should output
 
 # 10. Git config sharing (opt-in with --git-config)
 ./yolobox run --git-config cat /home/yolo/.gitconfig  # Should show copied host git config
+
+# 11. Amp config sharing (opt-in with --amp-config)
+./yolobox run --amp-config ls /home/yolo/.config/amp  # Should show copied host amp config
 ```
 
 ## Architecture
 
-yolobox is a single-binary Go CLI that runs AI coding agents (Claude Code, Codex, etc.) inside a container sandbox. The host home directory is protected by default.
+yolobox is a single-binary Go CLI that runs AI coding agents (Claude Code, Codex, Amp, etc.) inside a container sandbox. The host home directory is protected by default.
 
 ### Code Structure
 
@@ -115,6 +119,7 @@ All code lives in `cmd/yolobox/main.go` (~700 lines):
 - Runs as `yolo` user with full sudo access
 - Host home is NOT mounted (use `--mount ~:/host-home` if you really need it)
 - Host `~/.claude` can be copied to container with `--claude-config` flag (or `claude_config = true` in config)
+- Host `~/.config/amp` can be copied to container with `--amp-config` flag (or `amp_config = true` in config)
 
 ## Hard-Won Learnings
 
