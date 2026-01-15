@@ -1,6 +1,10 @@
 # Stage: Go source
 FROM golang:1.25.5 AS go-source
 
+# Stage: Crush installer
+FROM golang:1.25.5 AS crush-builder
+RUN GOBIN=/out go install github.com/charmbracelet/crush@latest
+
 # Stage: Claude Code installer
 FROM ubuntu:24.04 AS claude-installer
 
@@ -63,7 +67,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install global npm packages and AI CLIs
+# Install global npm packages and AI CLIs (except Amp - installed via script for auto-update)
 RUN npm install -g \
     typescript \
     ts-node \
@@ -97,6 +101,9 @@ RUN mkdir -p /workspace /output /secrets \
 
 # Copy Claude Code from installer stage
 COPY --from=claude-installer /root/.local/bin/claude /usr/local/bin/claude
+
+# Copy Crush from builder stage
+COPY --from=crush-builder /out/crush /usr/local/bin/crush
 
 USER yolo
 
@@ -162,6 +169,11 @@ RUN cp /opt/yolobox/wrapper-template /opt/yolobox/bin/amp \
     && echo 'exec "$REAL_BIN" --dangerously-allow-all "$@"' >> /opt/yolobox/bin/amp \
     && chmod +x /opt/yolobox/bin/amp
 
+# Crush wrapper
+RUN cp /opt/yolobox/wrapper-template /opt/yolobox/bin/crush \
+    && echo 'exec "$REAL_BIN" --yolo "$@"' >> /opt/yolobox/bin/crush \
+    && chmod +x /opt/yolobox/bin/crush
+
 
 # Add wrapper dir and ~/.local/bin to PATH (wrappers take priority)
 ENV PATH="/opt/yolobox/bin:/home/yolo/.local/bin:$PATH"
@@ -176,7 +188,7 @@ RUN echo 'echo ""' >> ~/.bashrc \
 
 # Create entrypoint script
 USER root
-RUN mkdir -p /host-claude /host-git /host-amp && \
+RUN mkdir -p /host-claude /host-git /host-amp /host-crush && \
     printf '%s\n' \
     '#!/bin/bash' \
     '' \
@@ -309,6 +321,14 @@ RUN mkdir -p /host-claude /host-git /host-amp && \
     '    mkdir -p /home/yolo/.config/amp' \
     '    sudo cp -a /host-amp/* /home/yolo/.config/amp/' \
     '    sudo chown -R yolo:yolo /home/yolo/.config/amp' \
+    'fi' \
+    '' \
+    '# Copy Crush config from host staging area if present' \
+    'if [ -d /host-crush ] && [ "$(ls -A /host-crush 2>/dev/null)" ]; then' \
+    '    echo -e "\033[33m→ Copying host Crush config to container\033[0m" >&2' \
+    '    mkdir -p /home/yolo/.config/crush' \
+    '    sudo cp -a /host-crush/* /home/yolo/.config/crush/' \
+    '    sudo chown -R yolo:yolo /home/yolo/.config/crush' \
     'fi' \
     '' \
     '# Auto-trust /workspace for Claude Code (this is yolobox after all)' \

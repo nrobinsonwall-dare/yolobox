@@ -54,6 +54,7 @@ var autoPassthroughEnvVars = []string{
 	"OPENROUTER_API_KEY",
 	"GEMINI_API_KEY",
 	"AMP_API_KEY",
+	"GROQ_API_KEY",
 }
 
 type Config struct {
@@ -68,6 +69,7 @@ type Config struct {
 	ClaudeConfig    bool     `toml:"claude_config"`
 	GitConfig       bool     `toml:"git_config"`
 	AmpConfig       bool     `toml:"amp_config"`
+	CrushConfig     bool     `toml:"crush_config"`
 	MatchHostUid    bool     `toml:"match_host_uid"`
 }
 
@@ -300,6 +302,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  --claude-config       Copy host Claude config to container")
 	fmt.Fprintln(os.Stderr, "  --git-config          Copy host git config to container")
 	fmt.Fprintln(os.Stderr, "  --amp-config          Copy host Amp config to container")
+	fmt.Fprintln(os.Stderr, "  --crush-config        Copy host Crush config to container")
 	fmt.Fprintln(os.Stderr, "  --match-host-uid      Match container UID/GID to host user")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "%sCONFIG:%s\n", colorBold, colorReset)
@@ -357,6 +360,8 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 	fs.BoolVar(&claudeConfig, "claude-config", false, "copy host Claude config to container")
 	fs.BoolVar(&gitConfig, "git-config", false, "copy host git config to container")
 	fs.BoolVar(&ampConfig, "amp-config", false, "copy host Amp config to container")
+	crushConfig := false
+	fs.BoolVar(&crushConfig, "crush-config", false, "copy host Crush config to container")
 	fs.BoolVar(&matchHostUid, "match-host-uid", false, "match container UID/GID to host user")
 	fs.Var(&mounts, "mount", "extra mount src:dst")
 	fs.Var(&envVars, "env", "environment variable KEY=value")
@@ -395,6 +400,9 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 	}
 	if ampConfig {
 		cfg.AmpConfig = true
+	}
+	if crushConfig {
+		cfg.CrushConfig = true
 	}
 	if matchHostUid {
 		cfg.MatchHostUid = true
@@ -560,6 +568,10 @@ func mergeConfigFile(path string, cfg *Config, restricted bool) error {
 			warn("Ignoring restricted field in project config: amp_config=true (use global config or CLI flags)")
 			fileCfg.AmpConfig = false
 		}
+		if fileCfg.CrushConfig {
+			warn("Ignoring restricted field in project config: crush_config=true (use global config or CLI flags)")
+			fileCfg.CrushConfig = false
+		}
 	}
 
 	mergeConfig(cfg, fileCfg)
@@ -639,6 +651,9 @@ func printActiveConfig(cfg Config) {
 	if cfg.AmpConfig {
 		active = append(active, "amp-config")
 	}
+	if cfg.CrushConfig {
+		active = append(active, "crush-config")
+	}
 	if cfg.MatchHostUid {
 		active = append(active, "match-host-uid")
 	}
@@ -685,6 +700,7 @@ func printConfig(cfg Config) error {
 	fmt.Printf("%sclaude_config:%s %t\n", colorBold, colorReset, cfg.ClaudeConfig)
 	fmt.Printf("%sgit_config:%s %t\n", colorBold, colorReset, cfg.GitConfig)
 	fmt.Printf("%samp_config:%s %t\n", colorBold, colorReset, cfg.AmpConfig)
+	fmt.Printf("%scrush_config:%s %t\n", colorBold, colorReset, cfg.CrushConfig)
 	fmt.Printf("%smatch_host_uid:%s %t\n", colorBold, colorReset, cfg.MatchHostUid)
 	if len(cfg.Mounts) > 0 {
 		fmt.Printf("%smounts:%s\n", colorBold, colorReset)
@@ -898,6 +914,18 @@ func buildRunArgs(cfg Config, projectDir string, command []string, interactive b
 		ampConfigDir := filepath.Join(home, ".config", "amp")
 		if _, err := os.Stat(ampConfigDir); err == nil {
 			args = append(args, "-v", ampConfigDir+":/host-amp:ro")
+		}
+	}
+
+	// Mount Crush config from host to staging area (copied to /home/yolo by entrypoint)
+	if cfg.CrushConfig {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		crushConfigDir := filepath.Join(home, ".config", "crush")
+		if _, err := os.Stat(crushConfigDir); err == nil {
+			args = append(args, "-v", crushConfigDir+":/host-crush:ro")
 		}
 	}
 

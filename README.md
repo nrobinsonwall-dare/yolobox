@@ -49,7 +49,7 @@ You're now in a sandboxed shell. Run `claude` and let it rip.
 ## What's in the Box?
 
 The base image comes batteries-included:
-- **AI CLIs**: Claude Code, Gemini CLI, OpenAI Codex, OpenCode, Copilot, Amp (all pre-configured for full-auto mode!)
+- **AI CLIs**: Claude Code, Gemini CLI, OpenAI Codex, OpenCode, Copilot, Amp, Crush (all pre-configured for full-auto mode!)
 - **Node.js 22** + npm/yarn/pnpm
 - **Python 3** + pip + venv
 - **Build tools**: make, cmake, gcc
@@ -70,6 +70,7 @@ Inside yolobox, the AI CLIs are aliased to skip all permission prompts:
 | `opencode` | `opencode` (no yolo flag available yet) |
 | `copilot` | `copilot --yolo` |
 | `amp` | `amp --dangerously-allow-all` |
+| `crush` | `crush --yolo` |
 
 No confirmations, no guardrails—just pure unfiltered AI, the way nature intended.
 
@@ -100,6 +101,7 @@ yolobox help                # Show help
 | `--readonly-project` | Mount project read-only (outputs go to `/output`) |
 | `--claude-config` | Copy host `~/.claude` config into container |
 | `--amp-config` | Copy host `~/.config/amp` config into container |
+| `--crush-config` | Copy host `~/.config/crush` config into container |
 
 ## Auto-Forwarded Environment Variables
 
@@ -110,6 +112,7 @@ These are automatically passed into the container if set:
 - `OPENROUTER_API_KEY`
 - `GEMINI_API_KEY`
 - `AMP_API_KEY`
+- `GROQ_API_KEY`
 
 ## Configuration
 
