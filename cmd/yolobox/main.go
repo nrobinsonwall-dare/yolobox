@@ -71,6 +71,7 @@ type Config struct {
 	AmpConfig       bool     `toml:"amp_config"`
 	CrushConfig     bool     `toml:"crush_config"`
 	MatchHostUid    bool     `toml:"match_host_uid"`
+	AllowHostHome   bool     `toml:"allow_host_home"`
 }
 
 type stringSliceFlag []string
@@ -304,6 +305,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  --amp-config          Copy host Amp config to container")
 	fmt.Fprintln(os.Stderr, "  --crush-config        Copy host Crush config to container")
 	fmt.Fprintln(os.Stderr, "  --match-host-uid      Match container UID/GID to host user")
+	fmt.Fprintln(os.Stderr, "  --allow-host-home     Allow running in host home directory")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "%sCONFIG:%s\n", colorBold, colorReset)
 	fmt.Fprintln(os.Stderr, "  Global:  ~/.config/yolobox/config.toml")
@@ -347,6 +349,7 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 		gitConfig       bool
 		ampConfig       bool
 		matchHostUid    bool
+		allowHostHome   bool
 		mounts          stringSliceFlag
 		envVars         stringSliceFlag
 	)
@@ -363,6 +366,7 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 	crushConfig := false
 	fs.BoolVar(&crushConfig, "crush-config", false, "copy host Crush config to container")
 	fs.BoolVar(&matchHostUid, "match-host-uid", false, "match container UID/GID to host user")
+	fs.BoolVar(&allowHostHome, "allow-host-home", false, "allow running in host home directory")
 	fs.Var(&mounts, "mount", "extra mount src:dst")
 	fs.Var(&envVars, "env", "environment variable KEY=value")
 
@@ -406,6 +410,9 @@ func parseBaseFlags(name string, args []string) (Config, []string, error) {
 	}
 	if matchHostUid {
 		cfg.MatchHostUid = true
+	}
+	if allowHostHome {
+		cfg.AllowHostHome = true
 	}
 	if len(mounts) > 0 {
 		cfg.Mounts = append(cfg.Mounts, mounts...)
@@ -618,6 +625,9 @@ func mergeConfig(dst *Config, src Config) {
 	if src.CrushConfig {
 		dst.CrushConfig = true
 	}
+	if src.AllowHostHome {
+		dst.AllowHostHome = true
+	}
 }
 
 func runShell(cfg Config) error {
@@ -675,6 +685,16 @@ func runCommand(cfg Config, command []string, interactive bool) error {
 		return err
 	}
 
+	if !cfg.AllowHostHome {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			absProject, err := filepath.Abs(projectDir)
+			if err == nil && absProject == home {
+				return fmt.Errorf("refusing to run in host home directory (%s). Use --allow-host-home to override", home)
+			}
+		}
+	}
+
 	// Warn if Docker has low memory (can cause OOM with Claude)
 	checkDockerMemory(cfg.Runtime)
 
@@ -702,6 +722,7 @@ func printConfig(cfg Config) error {
 	fmt.Printf("%samp_config:%s %t\n", colorBold, colorReset, cfg.AmpConfig)
 	fmt.Printf("%scrush_config:%s %t\n", colorBold, colorReset, cfg.CrushConfig)
 	fmt.Printf("%smatch_host_uid:%s %t\n", colorBold, colorReset, cfg.MatchHostUid)
+	fmt.Printf("%sallow_host_home:%s %t\n", colorBold, colorReset, cfg.AllowHostHome)
 	if len(cfg.Mounts) > 0 {
 		fmt.Printf("%smounts:%s\n", colorBold, colorReset)
 		for _, m := range cfg.Mounts {
